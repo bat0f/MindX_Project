@@ -1,0 +1,44 @@
+.admin-wrapper {
+  width: 100%;
+  max-width: 1400px;
+  align-self: center;
+}
+
+.admin-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.admin-danger-btn {
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #ff5a5f;
+  color: white;
+  font-weight: 700;
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.admin-section {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  background-color: rgba(255,255,255,0.4);
+  max-height: 86.3vh;
+  
+  .tabs {
+    width: 20%;
+    display: flex;
+    overflow-y: auto;
+  }
+  
+  .objects-list {
+    width: 80%;
+    border: 1px solid #F79361;
+    overflow-y: auto;
+  }
+}
