@@ -18,20 +18,29 @@ const SETTINGS_OPTIONS = {
 };
 
 const DEFAULT_TIME_LIMIT = 10;
-
+const DEFAULT_TURN_TIME_LIMIT = 30;
 const MathTicTacToe = () => {
   const { id } = useParams();
   const [loading, setLoading] = useState(true);
   const [block, setBlock] = useState('');
   const [gameInfo, setGameInfo] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [sessionDifficultyFilter, setSessionDifficultyFilter] = useState('all');
+  const [sessionBoardFilter, setSessionBoardFilter] = useState('all');
   const [state, setState] = useState(null);
   const [selectedBoardSize, setSelectedBoardSize] = useState(3);
   const [selectedDifficulty, setSelectedDifficulty] = useState('easy');
+  const [isSettingsDirty, setIsSettingsDirty] = useState(false);
   const [answer, setAnswer] = useState('');
   const [timer, setTimer] = useState(DEFAULT_TIME_LIMIT);
+  const [turnTimer, setTurnTimer] = useState(DEFAULT_TURN_TIME_LIMIT);
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
 
   const pollRef = useRef(null);
   const timerRef = useRef(null);
+  const turnTimerRef = useRef(null);
+  const answerInputRef = useRef(null);
 
   const currentPlayer = useMemo(
     () => state?.players?.find((item) => item.id === state?.playerId) || null,
@@ -47,10 +56,49 @@ const MathTicTacToe = () => {
     () => state?.players?.find((item) => item.id === state?.activePlayerId) || null,
     [state]
   );
+  const filteredSessions = useMemo(() => {
+    const search = sessionSearch.trim().toLowerCase();
+
+    return sessions
+      .filter((session) => {
+        if (!search) {
+          return true;
+        }
+
+        const names = [
+          session.leaderName,
+          ...(session.players || []).map((player) => player.name),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        return names.includes(search);
+      })
+      .filter((session) =>
+        sessionDifficultyFilter === 'all' ? true : session.difficulty === sessionDifficultyFilter
+      )
+      .filter((session) =>
+        sessionBoardFilter === 'all' ? true : session.boardSize === Number(sessionBoardFilter)
+      )
+      .sort((firstSession, secondSession) => {
+        return secondSession.updatedAt - firstSession.updatedAt;
+      });
+  }, [sessionBoardFilter, sessionDifficultyFilter, sessionSearch, sessions]);
 
   const isMyTurn = Boolean(currentPlayer?.id && currentPlayer.id === state?.activePlayerId);
   const isGameStarted = state?.status === 'playing';
   const isGameFinished = state?.status === 'finished';
+  const canManageSettings = Boolean(!state || state.isLeader);
+  const isChoosingCell = Boolean(isGameStarted && !state?.pendingQuestion && state?.turnExpiresAt);
+  const pendingQuestionKey = state?.pendingQuestion
+    ? [
+        state.pendingQuestion.row,
+        state.pendingQuestion.col,
+        state.pendingQuestion.task,
+        state.pendingQuestion.expiresAt,
+      ].join(':')
+    : '';
 
   const updateState = useCallback((nextState) => {
     if (!nextState) {
@@ -58,14 +106,25 @@ const MathTicTacToe = () => {
     }
 
     setState(nextState);
-    setSelectedBoardSize(nextState.boardSize || 3);
-    setSelectedDifficulty(nextState.difficulty || 'easy');
-  }, []);
+    setSelectedBoardSize((currentValue) =>
+      isSettingsDirty && nextState.status === 'waiting' ? currentValue : nextState.boardSize || 3
+    );
+    setSelectedDifficulty((currentValue) =>
+      isSettingsDirty && nextState.status === 'waiting' ? currentValue : nextState.difficulty || 'easy'
+    );
+  }, [isSettingsDirty]);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+  }, []);
+
+  const stopTurnTimer = useCallback(() => {
+    if (turnTimerRef.current) {
+      clearInterval(turnTimerRef.current);
+      turnTimerRef.current = null;
     }
   }, []);
 
@@ -77,7 +136,7 @@ const MathTicTacToe = () => {
 
   const handleTimeout = useCallback(async (showToast = true) => {
     try {
-      const response = await API.game.timeoutTicTacToe(id);
+      const response = await API.game.timeoutTicTacToe(id, { sessionId: state?.sessionId });
       updateState(response?.state);
       resetTaskState();
       if (showToast) {
@@ -90,7 +149,7 @@ const MathTicTacToe = () => {
         'Не удалось обработать таймаут.';
       ErrorEmmiter(message);
     }
-  }, [id, resetTaskState, updateState]);
+  }, [id, resetTaskState, state?.sessionId, updateState]);
 
   const startTaskTimer = useCallback((pendingQuestion) => {
     resetTaskState();
@@ -116,8 +175,12 @@ const MathTicTacToe = () => {
   }, [handleTimeout, resetTaskState]);
 
   const fetchState = useCallback(async ({ silent = true } = {}) => {
+    if (!state?.sessionId) {
+      return;
+    }
+
     try {
-      const response = await API.game.getTicTacToeState(id);
+      const response = await API.game.getTicTacToeState(id, state.sessionId);
       updateState(response?.state);
     } catch (error) {
       if (!silent) {
@@ -128,7 +191,28 @@ const MathTicTacToe = () => {
         ErrorEmmiter(message);
       }
     }
-  }, [id, updateState]);
+  }, [id, state?.sessionId, updateState]);
+
+  const refreshSessions = useCallback(async () => {
+    const response = await API.game.getTicTacToeSessions(id);
+    const nextSessions = response?.sessions || [];
+    setSessions(nextSessions);
+    return nextSessions;
+  }, [id]);
+
+  useEffect(() => {
+    if (state) {
+      return undefined;
+    }
+
+    const intervalId = setInterval(() => {
+      refreshSessions().catch((error) => {
+        console.error(error);
+      });
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [refreshSessions, state]);
 
   useEffect(() => {
     let ignore = false;
@@ -136,9 +220,9 @@ const MathTicTacToe = () => {
     const initialize = async () => {
       setLoading(true);
       try {
-        const [gameResponse, joinResponse] = await Promise.all([
+        const [gameResponse, sessionsResponse] = await Promise.all([
           API.game.getByIdUser(id),
-          API.game.joinTicTacToe(id),
+          API.game.getTicTacToeSessions(id),
         ]);
 
         if (ignore) {
@@ -146,7 +230,16 @@ const MathTicTacToe = () => {
         }
 
         setGameInfo(gameResponse);
-        updateState(joinResponse?.state);
+        const nextSessions = sessionsResponse?.sessions || [];
+        setSessions(nextSessions);
+
+        const currentSession = nextSessions.find((session) => session.isCurrentPlayer);
+        if (currentSession) {
+          const stateResponse = await API.game.getTicTacToeState(id, currentSession.sessionId);
+          if (!ignore) {
+            updateState(stateResponse?.state);
+          }
+        }
       } catch (error) {
         const message =
           error?.response?.data?.message ||
@@ -169,14 +262,15 @@ const MathTicTacToe = () => {
     return () => {
       ignore = true;
       stopTimer();
+      stopTurnTimer();
       if (pollRef.current) {
         clearInterval(pollRef.current);
       }
     };
-  }, [id, stopTimer, updateState]);
+  }, [id, stopTimer, stopTurnTimer, updateState]);
 
   useEffect(() => {
-    if (!state?.matchId) {
+    if (!state?.sessionId) {
       return undefined;
     }
 
@@ -189,23 +283,48 @@ const MathTicTacToe = () => {
         clearInterval(pollRef.current);
       }
     };
-  }, [fetchState, state?.matchId]);
+  }, [fetchState, state?.sessionId]);
 
   useEffect(() => {
     if (state?.pendingQuestion) {
       startTaskTimer(state.pendingQuestion);
+      window.setTimeout(() => answerInputRef.current?.focus(), 0);
       return;
     }
 
     resetTaskState();
-  }, [resetTaskState, startTaskTimer, state?.pendingQuestion]);
+    setIsSubmittingAnswer(false);
+    // Depend on a stable question key so polling does not restart the timer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingQuestionKey, resetTaskState, startTaskTimer]);
+
+  useEffect(() => {
+    stopTurnTimer();
+
+    if (!isChoosingCell) {
+      setTurnTimer(state?.turnTimeLimit || DEFAULT_TURN_TIME_LIMIT);
+      return undefined;
+    }
+
+    const updateTurnTimer = () => {
+      const nextValue = Math.max(0, Math.ceil((state.turnExpiresAt - Date.now()) / 1000));
+      setTurnTimer(nextValue);
+    };
+
+    updateTurnTimer();
+    turnTimerRef.current = setInterval(updateTurnTimer, 1000);
+
+    return stopTurnTimer;
+  }, [isChoosingCell, state?.turnExpiresAt, state?.turnTimeLimit, stopTurnTimer]);
 
   const handleApplySettings = async () => {
     try {
       const response = await API.game.updateTicTacToeSettings(id, {
+        sessionId: state.sessionId,
         boardSize: selectedBoardSize,
         difficulty: selectedDifficulty,
       });
+      setIsSettingsDirty(false);
       updateState(response?.state);
       SuccessEmmiter('Настройки матча обновлены');
     } catch (error) {
@@ -219,7 +338,8 @@ const MathTicTacToe = () => {
 
   const handleReady = async () => {
     try {
-      const response = await API.game.readyTicTacToe(id, { isReady: true });
+      const response = await API.game.readyTicTacToe(id, { sessionId: state.sessionId, isReady: true });
+      setIsSettingsDirty(false);
       updateState(response?.state);
       SuccessEmmiter(response?.started ? 'Матч начался' : 'Готовность подтверждена');
     } catch (error) {
@@ -238,6 +358,7 @@ const MathTicTacToe = () => {
 
     try {
       const response = await API.game.moveTicTacToe(id, {
+        sessionId: state.sessionId,
         row: rowIndex,
         col: colIndex,
       });
@@ -253,13 +374,21 @@ const MathTicTacToe = () => {
   };
 
   const handleSubmitAnswer = async () => {
+    if (isSubmittingAnswer) {
+      return;
+    }
+
     if (answer === '') {
       ErrorEmmiter('Введите ответ');
       return;
     }
 
     try {
-      const response = await API.game.answerTicTacToe(id, { answer: Number(answer) });
+      setIsSubmittingAnswer(true);
+      const response = await API.game.answerTicTacToe(id, {
+        sessionId: state.sessionId,
+        answer: Number(answer),
+      });
       updateState(response?.state);
       resetTaskState();
       SuccessEmmiter(response?.wasCorrect ? 'Верно!' : response?.message || 'Неверно');
@@ -269,12 +398,14 @@ const MathTicTacToe = () => {
         error?.response?.data?.error ||
         'Не удалось отправить ответ.';
       ErrorEmmiter(message);
+    } finally {
+      setIsSubmittingAnswer(false);
     }
   };
 
   const handleRematch = async () => {
     try {
-      const response = await API.game.rematchTicTacToe(id);
+      const response = await API.game.rematchTicTacToe(id, { sessionId: state.sessionId });
       updateState(response?.state);
       SuccessEmmiter(response?.restarted ? 'Новая партия началась' : 'Ждём подтверждения соперника');
     } catch (error) {
@@ -309,9 +440,97 @@ const MathTicTacToe = () => {
       return 'Ничья';
     }
 
+    if (state.winner.type === 'forfeit') {
+      return state.winner.message;
+    }
+
     const isMyWin = state.winner.playerId === state.playerId;
     return isMyWin ? 'Вы победили' : `Победил ${state.winner.name}`;
   };
+
+  const getWinningLineCoords = () => {
+    const cells = state?.winningCells || [];
+    const size = state?.boardSize || selectedBoardSize;
+
+    if (cells.length < 2 || !size) {
+      return null;
+    }
+
+    const sortedCells = [...cells].sort((firstCell, secondCell) => {
+      if (firstCell.row !== secondCell.row) {
+        return firstCell.row - secondCell.row;
+      }
+
+      return firstCell.col - secondCell.col;
+    });
+    const first = sortedCells[0];
+    const last = sortedCells[sortedCells.length - 1];
+    const startX = ((first.col + 0.5) / size) * 100;
+    const startY = ((first.row + 0.5) / size) * 100;
+    const endX = ((last.col + 0.5) / size) * 100;
+    const endY = ((last.row + 0.5) / size) * 100;
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
+    const length = Math.hypot(deltaX, deltaY);
+    const extension = Math.min(100 / size / 2, length / 2);
+    const unitX = deltaX / length;
+    const unitY = deltaY / length;
+
+    return {
+      x1: startX - unitX * extension,
+      y1: startY - unitY * extension,
+      x2: endX + unitX * extension,
+      y2: endY + unitY * extension,
+    };
+  };
+
+  const handleCreateSession = async () => {
+    try {
+      const response = await API.game.createTicTacToeSession(id, {
+        boardSize: selectedBoardSize,
+        difficulty: selectedDifficulty,
+      });
+      updateState(response?.state);
+      await refreshSessions();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Не удалось создать сессию.';
+      ErrorEmmiter(message);
+    }
+  };
+
+  const handleJoinSession = async (sessionId) => {
+    try {
+      const response = await API.game.joinTicTacToeSession(id, sessionId);
+      updateState(response?.state);
+      await refreshSessions();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Не удалось подключиться к сессии.';
+      ErrorEmmiter(message);
+    }
+  };
+
+  const handleLeaveGame = async () => {
+    try {
+      const response = await API.game.leaveTicTacToe(id, { sessionId: state.sessionId });
+      updateState(response?.state);
+      setState(null);
+      await refreshSessions();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Не удалось покинуть игру.';
+      ErrorEmmiter(message);
+    }
+  };
+
+  const winningLineCoords = getWinningLineCoords();
 
   if (block) {
     return <BlockingWindow message={block} />;
@@ -321,6 +540,89 @@ const MathTicTacToe = () => {
     <main className="ttt-section">
       {loading && <Loading />}
       <div className="container">
+        {!state && (
+          <section className="ttt-board-card ttt-session-card">
+            <div className="ttt-board-header">
+              <div>
+                <h2>Сессии</h2>
+                <p>Создайте новую сессию со своими настройками или подключитесь к свободной.</p>
+              </div>
+              <button className="primary-btn" type="button" onClick={handleCreateSession}>
+                Создать сессию
+              </button>
+            </div>
+
+            <div className="ttt-session-filters">
+              <label>
+                <span>Поиск игрока</span>
+                <input
+                  type="search"
+                  value={sessionSearch}
+                  onChange={(event) => setSessionSearch(event.target.value)}
+                  placeholder="Имя игрока"
+                />
+              </label>
+              <label>
+                <span>Сложность</span>
+                <select
+                  value={sessionDifficultyFilter}
+                  onChange={(event) => setSessionDifficultyFilter(event.target.value)}
+                >
+                  <option value="all">Все</option>
+                  {SETTINGS_OPTIONS.difficulties.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Размер поля</span>
+                <select
+                  value={sessionBoardFilter}
+                  onChange={(event) => setSessionBoardFilter(event.target.value)}
+                >
+                  <option value="all">Все</option>
+                  {SETTINGS_OPTIONS.boardSizes.map((size) => (
+                    <option key={size} value={size}>
+                      {size}x{size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="ttt-session-list">
+              {filteredSessions.length === 0 && (
+                <div className="ttt-session-empty">Пока нет активных сессий.</div>
+              )}
+              {filteredSessions.map((session) => (
+                <div className="ttt-session-item" key={session.sessionId}>
+                  <div>
+                    <strong>{session.leaderName || 'Сессия'}</strong>
+                    <span>
+                      {session.playersCount}/{session.maxPlayers} игрока, поле {session.boardSize}x{session.boardSize}
+                    </span>
+                    {Boolean(session.players?.length) && (
+                      <small>{session.players.map((player) => player.name).join(', ')}</small>
+                    )}
+                    <small>Сложность: {session.difficulty}</small>
+                  </div>
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    disabled={!session.canJoin && !session.isCurrentPlayer}
+                    onClick={() => handleJoinSession(session.sessionId)}
+                  >
+                    {session.isCurrentPlayer ? 'Вернуться' : 'Подключиться'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        {state && (
+          <>
         <div className="ttt-layout">
           <section className="ttt-hero-card">
             <span className="ttt-badge">Онлайн-игра в реальном времени</span>
@@ -376,6 +678,17 @@ const MathTicTacToe = () => {
                       : `Сейчас ходит ${activePlayer.name}`
                     : 'Матч начнётся, когда оба игрока будут готовы'}
               </div>
+              {isChoosingCell && (
+                <div className={`ttt-turn-timer ${turnTimer <= 5 ? 'danger' : ''}`}>
+                  <span>Время на ход</span>
+                  <strong>{turnTimer} сек.</strong>
+                </div>
+              )}
+              {!isGameFinished && currentPlayer && (
+                <button className="danger-btn ttt-leave-btn" type="button" onClick={handleLeaveGame}>
+                  Покинуть игру
+                </button>
+              )}
             </div>
 
             <div className="ttt-panel">
@@ -385,8 +698,11 @@ const MathTicTacToe = () => {
                   <span>Размер поля</span>
                   <select
                     value={selectedBoardSize}
-                    disabled={isGameStarted}
-                    onChange={(event) => setSelectedBoardSize(Number(event.target.value))}
+                    disabled={isGameStarted || !canManageSettings}
+                    onChange={(event) => {
+                      setIsSettingsDirty(true);
+                      setSelectedBoardSize(Number(event.target.value));
+                    }}
                   >
                     {SETTINGS_OPTIONS.boardSizes.map((size) => (
                       <option key={size} value={size}>
@@ -400,8 +716,11 @@ const MathTicTacToe = () => {
                   <span>Сложность</span>
                   <select
                     value={selectedDifficulty}
-                    disabled={isGameStarted}
-                    onChange={(event) => setSelectedDifficulty(event.target.value)}
+                    disabled={isGameStarted || !canManageSettings}
+                    onChange={(event) => {
+                      setIsSettingsDirty(true);
+                      setSelectedDifficulty(event.target.value);
+                    }}
                   >
                     {SETTINGS_OPTIONS.difficulties.map((item) => (
                       <option key={item.value} value={item.value}>
@@ -414,7 +733,7 @@ const MathTicTacToe = () => {
 
               {!isGameStarted && !isGameFinished && (
                 <div className="ttt-actions">
-                  <button className="primary-btn" onClick={handleApplySettings}>
+                  <button className="primary-btn" onClick={handleApplySettings} disabled={!canManageSettings}>
                     Сохранить настройки
                   </button>
                   <button
@@ -463,9 +782,16 @@ const MathTicTacToe = () => {
                     inputMode="numeric"
                     value={answer}
                     onChange={(event) => setAnswer(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleSubmitAnswer();
+                      }
+                    }}
                     placeholder="Ответ"
+                    ref={answerInputRef}
                   />
-                  <button className="primary-btn" onClick={handleSubmitAnswer}>
+                  <button className="primary-btn" onClick={handleSubmitAnswer} disabled={isSubmittingAnswer}>
                     Ответить
                   </button>
                 </div>
@@ -477,9 +803,19 @@ const MathTicTacToe = () => {
           <div
             className="ttt-board"
             style={{
-              gridTemplateColumns: `repeat(${state?.boardSize || selectedBoardSize}, minmax(72px, 1fr))`,
+              gridTemplateColumns: `repeat(${state?.boardSize || selectedBoardSize}, minmax(0, 1fr))`,
             }}
           >
+            {winningLineCoords && (
+              <svg className="ttt-winning-line" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <line
+                  x1={winningLineCoords.x1}
+                  y1={winningLineCoords.y1}
+                  x2={winningLineCoords.x2}
+                  y2={winningLineCoords.y2}
+                />
+              </svg>
+            )}
             {(state?.board || []).map((row, rowIndex) =>
               row.map((value, colIndex) => (
                 <button
@@ -500,6 +836,8 @@ const MathTicTacToe = () => {
             )}
           </div>
         </section>
+          </>
+        )}
       </div>
     </main>
   );

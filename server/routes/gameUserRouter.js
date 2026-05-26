@@ -9,6 +9,9 @@ const checkStartEndGameMiddleware = require('../middlewares/checkStartEndGameMid
 const validateRequest = require("../middlewares/validateRequest");
 const { userAnswerSchema } = require("../schemas/userAnswerSchema");
 
+router.get('/:id/tictactoe/sessions', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.sessions)
+router.post('/:id/tictactoe/sessions', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.createSession)
+router.post('/:id/tictactoe/sessions/:sessionId/join', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.joinSession)
 router.post('/:id/tictactoe/join', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.join)
 router.get('/:id/tictactoe/state', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.state)
 router.post('/:id/tictactoe/settings', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.settings)
@@ -16,6 +19,7 @@ router.post('/:id/tictactoe/ready', checkRoleForGameMiddleware(), checkStartEndG
 router.post('/:id/tictactoe/move', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.move)
 router.post('/:id/tictactoe/answer', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.answer)
 router.post('/:id/tictactoe/timeout', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.timeout)
+router.post('/:id/tictactoe/leave', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.leave)
 router.post('/:id/tictactoe/rematch', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathTicTacToeController.rematch)
 
 router.post('/:id/invaders/join', checkRoleForGameMiddleware(), checkStartEndGameMiddleware(), mathInvadersController.join)

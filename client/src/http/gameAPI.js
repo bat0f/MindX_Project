@@ -103,8 +103,25 @@ const joinTicTacToe = async (gameId) => {
 	return data;
 };
 
-const getTicTacToeState = async (gameId) => {
-	const { data } = await $authHost.get(`/api/game/${gameId}/tictactoe/state`);
+const getTicTacToeSessions = async (gameId) => {
+	const { data } = await $authHost.get(`/api/game/${gameId}/tictactoe/sessions`);
+	return data;
+};
+
+const createTicTacToeSession = async (gameId, body) => {
+	const { data } = await $authHost.post(`/api/game/${gameId}/tictactoe/sessions`, body);
+	return data;
+};
+
+const joinTicTacToeSession = async (gameId, sessionId) => {
+	const { data } = await $authHost.post(`/api/game/${gameId}/tictactoe/sessions/${sessionId}/join`);
+	return data;
+};
+
+const getTicTacToeState = async (gameId, sessionId) => {
+	const { data } = await $authHost.get(`/api/game/${gameId}/tictactoe/state`, {
+		params: { sessionId },
+	});
 	return data;
 };
 
@@ -128,13 +145,18 @@ const answerTicTacToe = async (gameId, body) => {
 	return data;
 };
 
-const timeoutTicTacToe = async (gameId) => {
-	const { data } = await $authHost.post(`/api/game/${gameId}/tictactoe/timeout`);
+const timeoutTicTacToe = async (gameId, body) => {
+	const { data } = await $authHost.post(`/api/game/${gameId}/tictactoe/timeout`, body);
 	return data;
 };
 
-const rematchTicTacToe = async (gameId) => {
-	const { data } = await $authHost.post(`/api/game/${gameId}/tictactoe/rematch`);
+const leaveTicTacToe = async (gameId, body) => {
+	const { data } = await $authHost.post(`/api/game/${gameId}/tictactoe/leave`, body);
+	return data;
+};
+
+const rematchTicTacToe = async (gameId, body) => {
+	const { data } = await $authHost.post(`/api/game/${gameId}/tictactoe/rematch`, body);
 	return data;
 };
 
@@ -204,11 +226,15 @@ export const gameAPI = {
 	answerInvaders,
 	timeoutInvaders,
 	joinTicTacToe,
+	getTicTacToeSessions,
+	createTicTacToeSession,
+	joinTicTacToeSession,
 	getTicTacToeState,
 	updateTicTacToeSettings,
 	readyTicTacToe,
 	moveTicTacToe,
 	answerTicTacToe,
 	timeoutTicTacToe,
+	leaveTicTacToe,
 	rematchTicTacToe,
 };
