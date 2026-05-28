@@ -164,12 +164,12 @@ const MindxTable = (props) => {
             {template?.map((column, index) => (
               <th key={index}>{column.label}</th>
             ))}
-            <th></th>
+            {!settings?.off_CUD && <th></th>}
           </tr>
         </thead>
         <tbody>
           {filteredData?.map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <tr key={rowIndex} className={type === 'rating' && row.id === user.user.id ? 'current-user-row' : ''}>
               {template?.map((column, colIndex) => {
                 const tooltipId = `tooltip-${rowIndex}-${colIndex}`;
                 const tooltipContent = getTooltipContent(column, row);
@@ -184,20 +184,22 @@ const MindxTable = (props) => {
                   </td>
                 );
               })}
-              <td className='command-icons'>
-                {!settings?.off_CUD &&
+              {!settings?.off_CUD && (
+                <td className='command-icons'>
+                  {
                   (type !== 'role' || (row.name !== 'ADMIN' && row.name !== 'USER')) &&
                   (type !== 'user' || (row.id !== user.user.id)) && (
-                  <>
-                    <button onClick={() => editItem(row)}>
-                      <FaEdit />
-                    </button>
-                    <button onClick={() => deleteItem(row)}>
-                      <FaTrashAlt />
-                    </button>
-                  </>
-                )}
-              </td>
+                    <>
+                      <button onClick={() => editItem(row)}>
+                        <FaEdit />
+                      </button>
+                      <button onClick={() => deleteItem(row)}>
+                        <FaTrashAlt />
+                      </button>
+                    </>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

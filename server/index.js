@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const router = require('./routes/indexRouter.js');
 const cors = require('cors');
@@ -10,8 +9,9 @@ const { InvadersData, User, Role } = require('./models');
 const errorHandler = require('./middlewares/ErrorHandlingMiddleware');
 const securityAuditService = require('./services/securityAuditService');
 const path = require('path');
+const { getPort } = require('./config/env');
 
-const PORT = process.env.PORT;
+const PORT = getPort();
 const DEFAULT_USER_ROLE_ID = 'aff50f23-2fbc-41be-ba07-c1c69c5e388c';
 const DEFAULT_ADMIN_ROLE_ID = '84f7f8b2-8b3e-4e1f-9f86-9e9d2d5a0b3a';
 

@@ -1,6 +1,7 @@
-require('dotenv').config()
-
 const Sequelize = require('sequelize')
+const { ensureRequiredEnv } = require('./config/env')
+
+ensureRequiredEnv()
 
 module.exports = new Sequelize(
     process.env.DATABASE_NAME,

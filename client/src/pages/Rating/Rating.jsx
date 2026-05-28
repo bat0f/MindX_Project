@@ -1,36 +1,33 @@
 import './rating.scss';
-import { templates } from '@mindx/metadata/RatingTable'
-import { useState } from 'react';
+import { templates } from '@mindx/metadata/RatingTable';
+import { useMemo, useState } from 'react';
 import MindxTable from '@mindx/components/MindxTable/MindxTable';
 import MindxTabs from '@mindx/components/MindxTabs/MindxTabs';
-import { API } from '@mindx/http/API.js'
+import { API } from '@mindx/http/API.js';
+import { GAME_LABELS_BY_TYPE, getGameLabel } from '@mindx/utils/gameLabels';
 
 const Rating = () => {
   const [data, setData] = useState([]);
   const [template, setTemplate] = useState({});
   const [reload, setReload] = useState(false);
   const [state, setState] = useState({});
+  const [ratingTypeGame, setRatingTypeGame] = useState(null);
   const settings = {
     off_CUD: true,
     customTab: true,
     type: 'rating',
     getTabList: async () => await getTabList(),
-    showType: true
-  }
+    showType: true,
+  };
 
   const getTabList = async () => {
     try {
       const response = await API?.rating?.getList();
-      const typeLabels = {
-        carousel: 'Карусель',
-        square: 'Квадрат',
-        invaders: 'Захватчики',
-      };
 
       return Object.values(response ?? {}).map((game) => ({
         id: game?.id,
-        label: game?.name,
-        type: typeLabels[game?.typeGame] || game?.typeGame,
+        label: getGameLabel(game),
+        type: GAME_LABELS_BY_TYPE[game?.typeGame] || game?.typeGame,
       }));
     } catch (error) {
       throw error;
@@ -40,6 +37,7 @@ const Rating = () => {
   const changeData = (newTemplate, removeLoading, id) => {
     newTemplate?.api.getById(id)
       .then(response => {
+        setRatingTypeGame(response?.typeGame || null);
         const rating = response?.rating || [];
         const countQuestions = response?.countQuestion;
         if (countQuestions) {
@@ -57,37 +55,47 @@ const Rating = () => {
       .finally(() => {
         removeLoading();
       });
-  }
-  return ( 
+  };
+
+  const tableTemplate = useMemo(() => {
+    const fields = template?.fileds || [];
+
+    if (ratingTypeGame === 'tictactoe') {
+      return fields.filter((field) => !['pointsBonuses', 'userAnswers'].includes(field.type));
+    }
+
+    return fields;
+  }, [ratingTypeGame, template]);
+
+  return (
     <main className="rating-section">
-      <>
-        <main className="admin-section">
-          <div className='tabs'>
-            <MindxTabs 
-              setTemplate={setTemplate} 
-              templates={templates} 
-              setData={setData} 
-              reload={reload} 
-              setReload={setReload}
-              changeData={changeData}
-              settings={settings}
-            />
-          </div>
-          <div className='objects-list'>
-            <MindxTable 
-              template={template?.fileds} 
-              type={template?.type} 
-              data={data} 
-              state={state}
-              setState={setState}
-              reload={reload} setReload={setReload}
-              settings={settings}
-            />
-          </div>
-        </main>
-      </>
+      <main className="admin-section">
+        <div className="tabs">
+          <MindxTabs
+            setTemplate={setTemplate}
+            templates={templates}
+            setData={setData}
+            reload={reload}
+            setReload={setReload}
+            changeData={changeData}
+            settings={settings}
+          />
+        </div>
+        <div className="objects-list">
+          <MindxTable
+            template={tableTemplate}
+            type={template?.type}
+            data={data}
+            state={state}
+            setState={setState}
+            reload={reload}
+            setReload={setReload}
+            settings={settings}
+          />
+        </div>
+      </main>
     </main>
   );
-}
+};
 
 export default Rating;

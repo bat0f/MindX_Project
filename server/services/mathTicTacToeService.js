@@ -1,5 +1,25 @@
 const crypto = require('crypto');
-const { Game } = require('../models');
+const { Game, Question, QuestionGame, UserAnswer } = require('../models');
+
+const POINTS_BY_DIFFICULTY = {
+  easy: 1,
+  medium: 1.25,
+  hard: 1.5,
+};
+
+const BOARD_MULTIPLIERS = {
+  3: 1,
+  4: 1.2,
+  5: 1.4,
+};
+
+const MATCH_POINTS = {
+  win: 40,
+  draw: 10,
+  loss: -15,
+  forfeitWin: 25,
+  quit: -40,
+};
 
 class MathTicTacToeService {
   constructor() {
@@ -49,6 +69,7 @@ class MathTicTacToeService {
       winningCells: [],
       moveCount: 0,
       pendingQuestion: null,
+      ratingApplied: false,
       updatedAt: Date.now(),
       createdAt: Date.now(),
     };
@@ -90,32 +111,38 @@ class MathTicTacToeService {
     sessions.forEach((session) => this.syncTimeout(session));
     this.deleteEmptySessions(container);
 
-    return [...container.sessions.values()].map((session) => ({
-      sessionId: session.sessionId,
-      leaderId: session.leaderId,
-      leaderName: session.players.find((player) => player.id === session.leaderId)?.name || null,
-      players: session.players.map((player) => ({
-        id: player.id,
-        name: player.name,
-        symbol: player.symbol,
-      })),
-      playersCount: session.players.length,
-      maxPlayers: 2,
-      status: session.status,
-      boardSize: session.boardSize,
-      difficulty: session.difficulty,
-      isCurrentPlayer: session.players.some((player) => player.id === userId),
-      canJoin: session.status === 'waiting' && session.players.length < 2,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-    }));
+    return [...container.sessions.values()]
+      .filter((session) => session.status !== 'finished')
+      .map((session) => ({
+        sessionId: session.sessionId,
+        leaderId: session.leaderId,
+        leaderName: session.players.find((player) => player.id === session.leaderId)?.name || null,
+        players: session.players.map((player) => ({
+          id: player.id,
+          name: player.name,
+          symbol: player.symbol,
+        })),
+        playersCount: session.players.length,
+        maxPlayers: 2,
+        status: session.status,
+        boardSize: session.boardSize,
+        difficulty: session.difficulty,
+        isCurrentPlayer: session.players.some((player) => player.id === userId),
+        canJoin: session.status === 'waiting' && session.players.length < 2,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      }));
   }
 
   async createSession(gameId, user, options = {}) {
     const container = await this.getGameContainer(gameId);
     const existingSession = this.findPlayerSession(container, user.id);
     if (existingSession) {
-      return this.toDto(existingSession, user.id);
+      if (existingSession.status === 'finished') {
+        this.removePlayerFromSession(container, existingSession, user.id);
+      } else {
+        return this.toDto(existingSession, user.id);
+      }
     }
 
     const session = this.createInitialState(gameId, user, options);
@@ -127,8 +154,12 @@ class MathTicTacToeService {
     const container = await this.getGameContainer(gameId);
     const existingSession = this.findPlayerSession(container, user.id);
     if (existingSession) {
-      this.syncTimeout(existingSession);
-      return this.toDto(existingSession, user.id);
+      if (existingSession.status === 'finished') {
+        this.removePlayerFromSession(container, existingSession, user.id);
+      } else {
+        this.syncTimeout(existingSession);
+        return this.toDto(existingSession, user.id);
+      }
     }
 
     const joinableSession = [...container.sessions.values()].find(
@@ -146,12 +177,14 @@ class MathTicTacToeService {
     const container = await this.getGameContainer(gameId);
     const existingSession = this.findPlayerSession(container, user.id);
     if (existingSession) {
-      if (existingSession.sessionId === sessionId) {
+      if (existingSession.status === 'finished') {
+        this.removePlayerFromSession(container, existingSession, user.id);
+      } else if (existingSession.sessionId === sessionId) {
         this.syncTimeout(existingSession);
         return this.toDto(existingSession, user.id);
+      } else {
+        throw new Error('Сначала покиньте текущую сессию');
       }
-
-      throw new Error('Сначала покиньте текущую сессию');
     }
 
     const session = this.getSession(container, sessionId);
@@ -183,7 +216,7 @@ class MathTicTacToeService {
     this.syncTimeout(session);
     this.ensureLeader(session, userId);
 
-    if (session.status === 'playing') {
+    if (session.status !== 'waiting') {
       throw new Error('Нельзя менять настройки после старта матча');
     }
 
@@ -244,6 +277,7 @@ class MathTicTacToeService {
     session.moveCount = 0;
     session.winner = null;
     session.winningCells = [];
+    session.ratingApplied = false;
 
     session.players.forEach((player) => {
       player.wantsRematch = false;
@@ -321,6 +355,7 @@ class MathTicTacToeService {
         session.winningCells = winnerPayload.cells;
         session.pendingQuestion = null;
         session.turnExpiresAt = null;
+        await this.applyMatchRating(session);
         this.updateTimestamp(session);
         return {
           success: true,
@@ -339,6 +374,7 @@ class MathTicTacToeService {
         session.winningCells = [];
         session.pendingQuestion = null;
         session.turnExpiresAt = null;
+        await this.applyMatchRating(session);
         this.updateTimestamp(session);
         return {
           success: true,
@@ -369,7 +405,6 @@ class MathTicTacToeService {
   async timeout(gameId, userId, sessionId) {
     const container = await this.getGameContainer(gameId);
     const session = this.resolveSession(container, userId, sessionId);
-    this.syncTimeout(session);
     this.ensureGamePlaying(session);
 
     if (session.pendingQuestion) {
@@ -397,9 +432,34 @@ class MathTicTacToeService {
     const player = this.getPlayer(session, userId);
     const opponent = session.players.find((item) => item.id !== userId);
 
+    if (session.status === 'finished') {
+      session.players = session.players.filter((item) => item.id !== userId);
+      if (opponent) {
+        session.leaderId = opponent.id;
+        opponent.isReady = false;
+        opponent.wantsRematch = false;
+      }
+      this.updateTimestamp(session);
+      this.deleteEmptySessions(container);
+      return {
+        success: true,
+        state: null,
+      };
+    }
+
     if (!opponent) {
       session.players = session.players.filter((item) => item.id !== userId);
       this.deleteEmptySessions(container);
+      return {
+        success: true,
+        state: null,
+      };
+    }
+
+    if (session.status === 'waiting') {
+      opponent.isReady = false;
+      opponent.wantsRematch = false;
+      this.removePlayerFromSession(container, session, userId);
       return {
         success: true,
         state: null,
@@ -419,6 +479,7 @@ class MathTicTacToeService {
     session.activePlayerId = null;
     session.turnExpiresAt = null;
     session.winningCells = [];
+    await this.applyForfeitRating(session, userId);
     session.players = [opponent];
 
     session.players.forEach((item) => {
@@ -450,17 +511,31 @@ class MathTicTacToeService {
       session.players = [session.players[1], session.players[0]].map((item) => ({
         ...item,
         symbol: item.symbol === 'X' ? 'O' : 'X',
-        isReady: true,
+        isReady: false,
         wantsRematch: false,
       }));
-      session.leaderId = session.players[0].id;
-      this.startMatch(session);
+      this.resetMatchToWaiting(session);
     }
 
     return {
-      restarted: session.status === 'playing',
+      reset: session.status === 'waiting',
+      restarted: false,
       state: this.toDto(session, userId),
     };
+  }
+
+  resetMatchToWaiting(session) {
+    session.status = 'waiting';
+    session.board = this.createBoard(session.boardSize);
+    session.lineLength = session.boardSize;
+    session.activePlayerId = null;
+    session.turnExpiresAt = null;
+    session.pendingQuestion = null;
+    session.moveCount = 0;
+    session.winner = null;
+    session.winningCells = [];
+    session.ratingApplied = false;
+    this.updateTimestamp(session);
   }
 
   getSession(container, sessionId) {
@@ -496,6 +571,17 @@ class MathTicTacToeService {
         container.sessions.delete(sessionId);
       }
     });
+  }
+
+  removePlayerFromSession(container, session, userId) {
+    session.players = session.players.filter((player) => player.id !== userId);
+
+    if (session.leaderId === userId && session.players.length > 0) {
+      session.leaderId = session.players[0].id;
+    }
+
+    this.updateTimestamp(session);
+    this.deleteEmptySessions(container);
   }
 
   getPlayer(session, userId) {
@@ -758,6 +844,128 @@ class MathTicTacToeService {
 
   randomChoice(list) {
     return list[this.randomInt(0, list.length - 1)];
+  }
+
+  getMatchMultiplier(session) {
+    const difficultyMultiplier = POINTS_BY_DIFFICULTY[this.normalizeDifficulty(session.difficulty)];
+    const boardMultiplier = BOARD_MULTIPLIERS[this.normalizeBoardSize(session.boardSize)];
+    return difficultyMultiplier * boardMultiplier;
+  }
+
+  getMatchPoints(session, result) {
+    return Math.round(MATCH_POINTS[result] * this.getMatchMultiplier(session));
+  }
+
+  async applyMatchRating(session) {
+    if (session.ratingApplied) {
+      return;
+    }
+
+    if (session.winner?.type === 'draw') {
+      await Promise.all(
+        session.players.map((player) =>
+          this.saveRatingAnswer({
+            gameId: session.gameId,
+            userId: player.id,
+            result: 'draw',
+            points: this.getMatchPoints(session, 'draw'),
+          })
+        )
+      );
+      session.ratingApplied = true;
+      return;
+    }
+
+    if (session.winner?.type !== 'winner') {
+      return;
+    }
+
+    await Promise.all(
+      session.players.map((player) => {
+        const result = player.id === session.winner.playerId ? 'win' : 'loss';
+
+        return this.saveRatingAnswer({
+          gameId: session.gameId,
+          userId: player.id,
+          result,
+          points: this.getMatchPoints(session, result),
+        });
+      })
+    );
+    session.ratingApplied = true;
+  }
+
+  async applyForfeitRating(session, quitterId) {
+    if (session.ratingApplied) {
+      return;
+    }
+
+    await Promise.all(
+      session.players.map((player) => {
+        const result = player.id === quitterId ? 'quit' : 'forfeitWin';
+
+        return this.saveRatingAnswer({
+          gameId: session.gameId,
+          userId: player.id,
+          result,
+          points: this.getMatchPoints(session, result),
+        });
+      })
+    );
+    session.ratingApplied = true;
+  }
+
+  async saveRatingAnswer({ gameId, userId, result, points }) {
+    const safePoints = await this.clampRatingDelta(gameId, userId, points);
+    const questionText = `TicTacToe match ${crypto.randomUUID()} result ${result}`;
+    const [question] = await Question.findOrCreate({
+      where: { question: questionText },
+      defaults: {
+        question: questionText,
+        answer: result,
+      },
+    });
+
+    const maxNumber = await QuestionGame.max('numberQuestion', {
+      where: { gameId },
+    });
+
+    const questionGame = await QuestionGame.create({
+      gameId,
+      questionId: question.id,
+      numberQuestion: Number(maxNumber || 0) + 1,
+    });
+
+    await UserAnswer.create({
+      questionGameId: questionGame.id,
+      userId,
+      points: safePoints,
+      userAnswer: result,
+      isCorrect: safePoints >= 0,
+    });
+  }
+
+  async clampRatingDelta(gameId, userId, delta) {
+    if (delta >= 0) {
+      return delta;
+    }
+
+    const answers = await UserAnswer.findAll({
+      attributes: ['points'],
+      include: [{
+        model: QuestionGame,
+        attributes: [],
+        required: true,
+        where: { gameId },
+      }],
+      where: {
+        userId,
+        userAnswer: ['win', 'draw', 'loss', 'forfeitWin', 'quit'],
+      },
+    });
+    const currentTotal = answers.reduce((sum, answer) => sum + Number(answer.points || 0), 0);
+
+    return -Math.min(Math.max(currentTotal, 0), Math.abs(delta));
   }
 
   toDto(session, userId) {

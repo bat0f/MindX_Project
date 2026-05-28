@@ -1,6 +1,7 @@
 import classes from './gameCard.module.css';
 import { NavLink } from 'react-router-dom';
 import { Image } from 'react-bootstrap';
+import { getGameLabel } from '@mindx/utils/gameLabels';
 
 const GameCard = (props) => {
     const { model } = props;
@@ -45,7 +46,7 @@ const GameCard = (props) => {
                     className={classes.game_img}
                     src={`${process.env.REACT_APP_HOST}/api/${model.imageId || 'without_image'}.jpg`}
                 />
-                <div className={classes.game_name}>{model.name}</div>
+                <div className={classes.game_name}>{getGameLabel(model)}</div>
                 <div className={classes.game_info}>
                     <div className={classes.game_time}>
                         <span>Начало: {formatDate(model.startDate)}</span>

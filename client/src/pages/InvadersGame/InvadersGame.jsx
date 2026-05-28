@@ -6,6 +6,7 @@ import { API } from '@mindx/http/API';
 import BlockingWindow from '@mindx/components/BlockingWindow/BlockingWindow';
 import Loading from '@mindx/components/UI/Loading/Loading';
 import { ErrorEmmiter, SuccessEmmiter } from '@mindx/components/UI/Toastify/Notify';
+import { getGameLabel } from '@mindx/utils/gameLabels';
 
 const TASK_TIME_LIMIT = 30;
 
@@ -308,7 +309,7 @@ const InvadersGame = () => {
         <div className="invaders-layout">
           <section className="invaders-hero">
             <span className="invaders-badge">Математическая игра</span>
-            <h1>{gameInfo?.name || 'Захватчики'}</h1>
+            <h1>{getGameLabel(gameInfo) || 'Захватчики'}</h1>
             <p className="invaders-description">
               Захватывайте клетки, тратьте монеты на попытки и решайте задачи быстрее
               соперников.

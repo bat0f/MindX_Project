@@ -11,7 +11,7 @@ class ratingController {
             const { typeGame } = await Game.findByPk(req.params.id, { attributes: ["typeGame"] })
             const { countQuestion, rating } = await this.getRatingPrivate(req.params.id, typeGame)
 
-            res.json({ countQuestion, rating })
+            res.json({ countQuestion, rating, typeGame })
         } catch (error) {
             return next(ApiError.badRequest(`Ошибка получения: ${error.message}`))
         }
@@ -25,6 +25,7 @@ class ratingController {
                 attributes: [
                     'points',
                     'isCorrect',
+                    'userAnswer',
                     [Sequelize.literal('"userAnswers->questionGame"."numberQuestion"'), 'numberQuestion']
                 ],
                 required: false,
@@ -66,7 +67,20 @@ class ratingController {
                     points += answer.points
                 }
             })
-            if (typeGame === 'square') {
+            if (typeGame === 'tictactoe') {
+                const ratingResults = ['win', 'draw', 'loss', 'forfeitWin', 'quit']
+                user.totalPoints = Math.max(
+                    0,
+                    user.userAnswers.reduce((sum, answer) => {
+                        if (!ratingResults.includes(answer.userAnswer)) {
+                            return sum
+                        }
+
+                        return sum + Number(answer.points || 0)
+                    }, 0)
+                )
+            }
+            else if (typeGame === 'square') {
                 user.pointsAnswer = points,
                     points = 0
                 user.bonuses.forEach(bonus => {

@@ -1,9 +1,10 @@
 import './mathtictactoe.scss';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import moment from 'moment';
 import { API } from '@mindx/http/API';
 import { ROUTES } from '@mindx/utils/consts';
+import { getGameLabel } from '@mindx/utils/gameLabels';
 import BlockingWindow from '@mindx/components/BlockingWindow/BlockingWindow';
 import Loading from '@mindx/components/UI/Loading/Loading';
 import { ErrorEmmiter, SuccessEmmiter } from '@mindx/components/UI/Toastify/Notify';
@@ -17,10 +18,14 @@ const SETTINGS_OPTIONS = {
   ],
 };
 
+const getDifficultyLabel = (difficulty) =>
+  SETTINGS_OPTIONS.difficulties.find((item) => item.value === difficulty)?.label || difficulty;
+
 const DEFAULT_TIME_LIMIT = 10;
 const DEFAULT_TURN_TIME_LIMIT = 30;
 const MathTicTacToe = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [block, setBlock] = useState('');
   const [gameInfo, setGameInfo] = useState(null);
@@ -41,6 +46,7 @@ const MathTicTacToe = () => {
   const timerRef = useRef(null);
   const turnTimerRef = useRef(null);
   const answerInputRef = useRef(null);
+  const latestStateRef = useRef(null);
 
   const currentPlayer = useMemo(
     () => state?.players?.find((item) => item.id === state?.playerId) || null,
@@ -89,7 +95,7 @@ const MathTicTacToe = () => {
   const isMyTurn = Boolean(currentPlayer?.id && currentPlayer.id === state?.activePlayerId);
   const isGameStarted = state?.status === 'playing';
   const isGameFinished = state?.status === 'finished';
-  const canManageSettings = Boolean(!state || state.isLeader);
+  const canManageSettings = Boolean(!state || (state.isLeader && state.status === 'waiting'));
   const isChoosingCell = Boolean(isGameStarted && !state?.pendingQuestion && state?.turnExpiresAt);
   const pendingQuestionKey = state?.pendingQuestion
     ? [
@@ -201,6 +207,22 @@ const MathTicTacToe = () => {
   }, [id]);
 
   useEffect(() => {
+    latestStateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    return () => {
+      const currentState = latestStateRef.current;
+
+      if (currentState?.sessionId) {
+        API.game.leaveTicTacToe(id, { sessionId: currentState.sessionId }).catch((error) => {
+          console.error(error);
+        });
+      }
+    };
+  }, [id]);
+
+  useEffect(() => {
     if (state) {
       return undefined;
     }
@@ -233,7 +255,9 @@ const MathTicTacToe = () => {
         const nextSessions = sessionsResponse?.sessions || [];
         setSessions(nextSessions);
 
-        const currentSession = nextSessions.find((session) => session.isCurrentPlayer);
+        const currentSession = nextSessions.find(
+          (session) => session.isCurrentPlayer && session.status !== 'finished'
+        );
         if (currentSession) {
           const stateResponse = await API.game.getTicTacToeState(id, currentSession.sessionId);
           if (!ignore) {
@@ -407,7 +431,7 @@ const MathTicTacToe = () => {
     try {
       const response = await API.game.rematchTicTacToe(id, { sessionId: state.sessionId });
       updateState(response?.state);
-      SuccessEmmiter(response?.restarted ? 'Новая партия началась' : 'Ждём подтверждения соперника');
+      SuccessEmmiter(response?.reset ? 'Настройте новый матч' : 'Ждём подтверждения соперника');
     } catch (error) {
       const message =
         error?.response?.data?.message ||
@@ -519,6 +543,7 @@ const MathTicTacToe = () => {
     try {
       const response = await API.game.leaveTicTacToe(id, { sessionId: state.sessionId });
       updateState(response?.state);
+      latestStateRef.current = null;
       setState(null);
       await refreshSessions();
     } catch (error) {
@@ -530,7 +555,28 @@ const MathTicTacToe = () => {
     }
   };
 
+  const handleReturnToMenu = async () => {
+    try {
+      await API.game.leaveTicTacToe(id, { sessionId: state.sessionId });
+      latestStateRef.current = null;
+      setState(null);
+      navigate(ROUTES.TICTACTOE_ROUTE);
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Не удалось выйти в меню.';
+      ErrorEmmiter(message);
+    }
+  };
+
   const winningLineCoords = getWinningLineCoords();
+  const winningLineClassName = [
+    'ttt-winning-line',
+    state?.winner?.symbol === 'O' ? 'o-line' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   if (block) {
     return <BlockingWindow message={block} />;
@@ -606,7 +652,7 @@ const MathTicTacToe = () => {
                     {Boolean(session.players?.length) && (
                       <small>{session.players.map((player) => player.name).join(', ')}</small>
                     )}
-                    <small>Сложность: {session.difficulty}</small>
+                    <small>Сложность: {getDifficultyLabel(session.difficulty)}</small>
                   </div>
                   <button
                     className="secondary-btn"
@@ -626,7 +672,7 @@ const MathTicTacToe = () => {
         <div className="ttt-layout">
           <section className="ttt-hero-card">
             <span className="ttt-badge">Онлайн-игра в реальном времени</span>
-            <h1>{gameInfo?.name || 'Крестики нолики'}</h1>
+            <h1>{getGameLabel(gameInfo) || 'Крестики-нолики'}</h1>
             <p className="ttt-description">
               Перед каждым ходом игрок решает математический пример. Верный ответ даёт
               право занять клетку, неверный ответ или таймаут в 10 секунд передают ход
@@ -698,7 +744,7 @@ const MathTicTacToe = () => {
                   <span>Размер поля</span>
                   <select
                     value={selectedBoardSize}
-                    disabled={isGameStarted || !canManageSettings}
+                    disabled={!canManageSettings}
                     onChange={(event) => {
                       setIsSettingsDirty(true);
                       setSelectedBoardSize(Number(event.target.value));
@@ -716,7 +762,7 @@ const MathTicTacToe = () => {
                   <span>Сложность</span>
                   <select
                     value={selectedDifficulty}
-                    disabled={isGameStarted || !canManageSettings}
+                    disabled={!canManageSettings}
                     onChange={(event) => {
                       setIsSettingsDirty(true);
                       setSelectedDifficulty(event.target.value);
@@ -751,9 +797,9 @@ const MathTicTacToe = () => {
                   <button className="primary-btn" onClick={handleRematch}>
                     Сыграть снова
                   </button>
-                  <NavLink to={ROUTES.TICTACTOE_ROUTE} className="secondary-link-btn">
+                  <button className="secondary-link-btn" type="button" onClick={handleReturnToMenu}>
                     Вернуться в меню
-                  </NavLink>
+                  </button>
                 </div>
               )}
             </div>
@@ -807,7 +853,7 @@ const MathTicTacToe = () => {
             }}
           >
             {winningLineCoords && (
-              <svg className="ttt-winning-line" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <svg className={winningLineClassName} viewBox="0 0 100 100" preserveAspectRatio="none">
                 <line
                   x1={winningLineCoords.x1}
                   y1={winningLineCoords.y1}
