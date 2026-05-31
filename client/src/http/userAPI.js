@@ -87,6 +87,21 @@ const updateProfile = async (model) => {
   return data;
 };
 
+const setupTotp = async () => {
+  const { data } = await $authHost.post('/api/user/totp/setup');
+  return data;
+};
+
+const confirmTotp = async (code) => {
+  const { data } = await $authHost.post('/api/user/totp/confirm', { code });
+  return data;
+};
+
+const disableTotp = async (code) => {
+  const { data } = await $authHost.post('/api/user/totp/disable', { code });
+  return data;
+};
+
 const logout = async () => {
   const { data } = await $authHost.post('/api/user/logout');
   return data;
@@ -132,6 +147,9 @@ export const userAPI = {
   getSessions,
   logoutSession,
   updateProfile,
+  setupTotp,
+  confirmTotp,
+  disableTotp,
   logout,
   logoutAll,
   logoutAllUsers,

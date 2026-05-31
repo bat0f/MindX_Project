@@ -83,6 +83,10 @@ const verifyTwoFactorSchema = Joi.object({
   rememberDevice: Joi.boolean().optional().default(false),
 }).messages(sharedMessages);
 
+const totpCodeSchema = Joi.object({
+  code: codeValidation.required(),
+}).messages(sharedMessages);
+
 const forgotPasswordSchema = Joi.object({
   email: emailValidation.required(),
 }).messages(sharedMessages);
@@ -139,6 +143,7 @@ module.exports = {
   verifyEmailSchema,
   resendVerificationSchema,
   verifyTwoFactorSchema,
+  totpCodeSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   userPutSchemaForAdmin,

@@ -1,8 +1,8 @@
 .section {
   flex: 1 1 auto;
   align-items: center;
-  gap: 44px;
-  padding: 36px 24px 56px;
+  gap: 34px;
+  padding: 32px 24px 56px;
   letter-spacing: 0;
 }
 
@@ -34,19 +34,45 @@
   color: #ff7a00;
 }
 
-.gamesGrid {
+.gamesSection {
   width: min(100%, 1060px);
+}
+
+.gamesHeading {
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.gamesHeading span {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #f47621;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gamesHeading h2 {
+  color: #151515;
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.gamesGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  gap: 20px;
 }
 
 .gameCard {
-  min-height: 270px;
+  min-height: 292px;
   display: grid;
-  grid-template-rows: 58px 56px 1fr auto;
+  grid-template-rows: 58px auto 1fr auto;
   align-items: start;
-  padding: 22px;
+  row-gap: 8px;
+  padding: 24px;
   border: 1px solid rgba(25, 25, 25, 0.08);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
@@ -76,20 +102,20 @@
 .gameTitle {
   align-self: start;
   margin-top: 0;
-  font-size: 21px;
+  font-size: 22px;
   line-height: 1.18;
   font-weight: 700;
 }
 
 .gameDescription {
-  margin-top: 10px;
+  margin-top: 2px;
   color: #4a4a4a;
   font-size: 15px;
-  line-height: 1.35;
+  line-height: 1.42;
 }
 
 .gameAction {
-  margin-top: 22px;
+  margin-top: 0;
   color: var(--card-accent);
   font-size: 15px;
   font-weight: 700;
@@ -128,6 +154,6 @@
   }
 
   .gameCard {
-    min-height: 230px;
+    min-height: 244px;
   }
 }

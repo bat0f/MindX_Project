@@ -15,6 +15,7 @@ const SignIn = observer(() => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [challengeToken, setChallengeToken] = useState('');
+  const [twoFactorMethod, setTwoFactorMethod] = useState('email');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [rememberDevice, setRememberDevice] = useState(false);
   const [emailHint, setEmailHint] = useState('');
@@ -40,8 +41,9 @@ const SignIn = observer(() => {
 
       if (data?.requiresTwoFactor) {
         setChallengeToken(data.challengeToken);
-        setEmailHint(data.email);
-        SuccessEmmiter(data.message || 'Код отправлен на почту.');
+        setTwoFactorMethod(data.method || 'email');
+        setEmailHint(data.email || '');
+        SuccessEmmiter(data.message || 'Код подтверждения запрошен.');
         return;
       }
 
@@ -140,11 +142,17 @@ const SignIn = observer(() => {
 
           {challengeToken && (
             <>
-              <p>
-                Код отправлен на почту: <strong>{emailHint}</strong>
-              </p>
+              {twoFactorMethod === 'totp' ? (
+                <p>Введите код из Google Authenticator или другого приложения-аутентификатора.</p>
+              ) : (
+                <p>
+                  Код отправлен на почту: <strong>{emailHint}</strong>
+                </p>
+              )}
               <div>
-                <label htmlFor="twoFactorCode">Код из письма</label>
+                <label htmlFor="twoFactorCode">
+                  {twoFactorMethod === 'totp' ? 'Код из приложения' : 'Код из письма'}
+                </label>
                 <input
                   type="text"
                   required
@@ -168,6 +176,7 @@ const SignIn = observer(() => {
                   className="btn sign"
                   onClick={() => {
                     setChallengeToken('');
+                    setTwoFactorMethod('email');
                     setTwoFactorCode('');
                     setRememberDevice(false);
                   }}

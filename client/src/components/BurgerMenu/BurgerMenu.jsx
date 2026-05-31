@@ -66,7 +66,7 @@ const BurgerMenu = observer((props) => {
                             </li>
                             <li className="burger-list__item">
                                 <NavLink to="/tictactoe" onClick={() => setIsActiveBurger(false)}>
-                                    Крестики нолики
+                                    Крестики-нолики
                                 </NavLink>
                             </li>
                             <li className="burger-list__item">

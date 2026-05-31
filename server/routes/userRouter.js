@@ -10,6 +10,7 @@ const {
   verifyEmailSchema,
   resendVerificationSchema,
   verifyTwoFactorSchema,
+  totpCodeSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
 } = require("../schemas/userSchema");
@@ -26,6 +27,9 @@ router.post('/resend-verification', validateRequest(resendVerificationSchema), u
 router.post('/forgot-password', validateRequest(forgotPasswordSchema), userController.forgotPassword)
 router.post('/reset-password', validateRequest(resetPasswordSchema), userController.resetPassword)
 router.post('/verify-2fa', validateRequest(verifyTwoFactorSchema), userController.verifyTwoFactor)
+router.post('/totp/setup', authMiddleware(), userController.setupTotp)
+router.post('/totp/confirm', authMiddleware(), validateRequest(totpCodeSchema), userController.confirmTotp)
+router.post('/totp/disable', authMiddleware(), validateRequest(totpCodeSchema), userController.disableTotp)
 router.get('/auth', authMiddleware(), userController.check)
 router.post('/logout', authMiddleware(), userController.logout)
 router.post('/logout-all', authMiddleware(), userController.logoutAll)

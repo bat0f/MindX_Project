@@ -119,6 +119,25 @@ const start = async () => {
         defaultValue: false,
       });
     }
+    if (!userColumns.isTotpEnabled) {
+      await queryInterface.addColumn(userTable, 'isTotpEnabled', {
+        type: sequelize.Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      });
+    }
+    if (!userColumns.totpSecret) {
+      await queryInterface.addColumn(userTable, 'totpSecret', {
+        type: sequelize.Sequelize.TEXT,
+        allowNull: true,
+      });
+    }
+    if (!userColumns.totpConfirmedAt) {
+      await queryInterface.addColumn(userTable, 'totpConfirmedAt', {
+        type: sequelize.Sequelize.DATE,
+        allowNull: true,
+      });
+    }
     if (!userColumns.tokenVersion) {
       await queryInterface.addColumn(userTable, 'tokenVersion', {
         type: sequelize.Sequelize.INTEGER,

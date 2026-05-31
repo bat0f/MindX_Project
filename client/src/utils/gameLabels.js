@@ -10,6 +10,8 @@ const GAME_LABELS_BY_NAME = {
   'dev math carousel': GAME_LABELS_BY_TYPE.carousel,
   'dev math invaders': GAME_LABELS_BY_TYPE.invaders,
   'dev math tic tac toe': GAME_LABELS_BY_TYPE.tictactoe,
+  'крестики нолики': GAME_LABELS_BY_TYPE.tictactoe,
+  'крестики-нолики': GAME_LABELS_BY_TYPE.tictactoe,
 };
 
 export const getGameLabel = (game) => {

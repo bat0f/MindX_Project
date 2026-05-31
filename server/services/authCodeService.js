@@ -69,6 +69,22 @@ class AuthCodeService {
     return challengeToken;
   }
 
+  async createTotpChallenge(user) {
+    await this.clearActiveCodes(user.id, 'totp');
+    const challengeToken = this.generateChallengeToken();
+
+    await AuthCode.create({
+      userId: user.id,
+      purpose: 'totp',
+      email: user.email,
+      codeHash: 'totp_challenge',
+      challengeToken,
+      expiresAt: new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000),
+    });
+
+    return challengeToken;
+  }
+
   async createPasswordResetCode(user) {
     await this.clearActiveCodes(user.id, 'password_reset');
     const code = this.generateCode();

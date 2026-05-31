@@ -10,6 +10,8 @@
 
 .settings-modal {
   width: min(100%, 520px);
+  max-height: 92vh;
+  overflow-y: auto;
   background: white;
   border-radius: 20px;
   padding: 24px;
@@ -72,6 +74,60 @@
   display: grid;
   gap: 10px;
   margin-top: 12px;
+}
+
+.totp-box {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f7fbff;
+  border: 1px solid #dcecff;
+
+  h3 {
+    margin: 0 0 4px;
+  }
+}
+
+.totp-status {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #f2f2f2;
+  color: #6a6a6a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.totp-status--on {
+  background: #e4f8ed;
+  color: #237347;
+}
+
+.totp-setup {
+  display: grid;
+  gap: 10px;
+}
+
+.totp-qr-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 12px;
+  background: white;
+  border: 1px solid #d0d0d0;
+}
+
+.totp-qr {
+  width: min(220px, 100%);
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.totp-secret {
+  width: 100%;
+  font-family: monospace;
+  letter-spacing: 0;
 }
 
 .session-box {

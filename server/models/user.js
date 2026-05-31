@@ -33,6 +33,19 @@ const User = sequelize.define('user',
             allowNull: false,
             defaultValue: false
         },
+        isTotpEnabled: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        },
+        totpSecret: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        totpConfirmedAt: {
+            type: DataTypes.DATE,
+            allowNull: true
+        },
         tokenVersion: {
             type: DataTypes.INTEGER,
             allowNull: false,

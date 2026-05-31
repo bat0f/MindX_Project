@@ -7,6 +7,8 @@ const generateHashPassword = require('../utils/generateHashPassword');
 const generateJwt = require('../utils/generateJwt');
 const securityAuditService = require('../services/securityAuditService');
 const authCodeService = require('../services/authCodeService');
+const totpService = require('../services/totpService');
+const qrCodeService = require('../services/qrCodeService');
 const trustedDeviceService = require('../services/trustedDeviceService');
 const emailService = require('../services/emailService');
 const accountProtectionService = require('../services/accountProtectionService');
@@ -33,6 +35,9 @@ class UserController {
     this.resetPassword = this.resetPassword.bind(this);
     this.signin = this.signin.bind(this);
     this.verifyTwoFactor = this.verifyTwoFactor.bind(this);
+    this.setupTotp = this.setupTotp.bind(this);
+    this.confirmTotp = this.confirmTotp.bind(this);
+    this.disableTotp = this.disableTotp.bind(this);
     this.check = this.check.bind(this);
     this.getProfile = this.getProfile.bind(this);
     this.getSessions = this.getSessions.bind(this);
@@ -53,6 +58,7 @@ class UserController {
       email: user.email,
       isEmailVerified: user.isEmailVerified,
       isTwoFactorEnabled: user.isTwoFactorEnabled,
+      isTotpEnabled: user.isTotpEnabled,
       role: user.role?.name || null,
     };
   }
@@ -441,6 +447,27 @@ class UserController {
       }
 
       const isTrusted = await trustedDeviceService.isTrusted(req, user.id);
+      if (user.isTotpEnabled && user.totpSecret && !isTrusted) {
+        const challengeToken = await authCodeService.createTotpChallenge(user);
+
+        await securityAuditService.log({
+          req,
+          userId: user.id,
+          username: user.username,
+          action: 'auth.signin.totp_challenge',
+          targetType: 'user',
+          targetId: user.id,
+          details: { viaTrustedDevice: false },
+        });
+
+        return res.json({
+          requiresTwoFactor: true,
+          method: 'totp',
+          challengeToken,
+          message: 'Введите код из приложения-аутентификатора.',
+        });
+      }
+
       if (user.isTwoFactorEnabled && !isTrusted) {
         const challengeToken = await authCodeService.createTwoFactorCode(user);
 
@@ -456,6 +483,7 @@ class UserController {
 
         return res.json({
           requiresTwoFactor: true,
+          method: 'email',
           challengeToken,
           email: user.email,
           message: 'Код подтверждения отправлен на почту.',
@@ -496,31 +524,53 @@ class UserController {
     try {
       const { challengeToken, code, rememberDevice } = req.body;
       const codeEntryUser = await AuthCode.findOne({
-        where: { challengeToken, purpose: 'two_factor', consumedAt: null },
+        where: {
+          challengeToken,
+          purpose: { [Op.in]: ['two_factor', 'totp'] },
+          consumedAt: null,
+          expiresAt: { [Op.gt]: new Date() },
+        },
         include: [{ model: User, include: [{ model: Role, attributes: ['name'], required: false }] }],
       });
 
       validateCheck(!codeEntryUser?.user, 'Сессия подтверждения не найдена.');
       accountProtectionService.assertNotLocked(codeEntryUser.user);
 
-      const valid = await authCodeService.consumeCode({
-        userId: codeEntryUser.user.id,
-        purpose: 'two_factor',
-        code,
-        challengeToken,
-      });
+      const isTotpChallenge = codeEntryUser.purpose === 'totp';
+      let valid = false;
+
+      if (isTotpChallenge) {
+        try {
+          const secret = totpService.decryptSecret(codeEntryUser.user.totpSecret);
+          valid = Boolean(codeEntryUser.user.isTotpEnabled && totpService.verifyCode(secret, code));
+        } catch {
+          valid = false;
+        }
+
+        if (valid) {
+          codeEntryUser.consumedAt = new Date();
+          await codeEntryUser.save();
+        }
+      } else {
+        valid = await authCodeService.consumeCode({
+          userId: codeEntryUser.user.id,
+          purpose: 'two_factor',
+          code,
+          challengeToken,
+        });
+      }
 
       if (!valid) {
         const failedState = await accountProtectionService.registerFailedLogin(
           req,
           codeEntryUser.user,
-          'invalid_two_factor_code'
+          isTotpChallenge ? 'invalid_totp_code' : 'invalid_two_factor_code'
         );
         await securityAuditService.log({
           req,
           userId: codeEntryUser.user.id,
           username: codeEntryUser.user.username,
-          action: 'auth.signin.2fa_failure',
+          action: isTotpChallenge ? 'auth.signin.totp_failure' : 'auth.signin.2fa_failure',
           status: 'failure',
           targetType: 'user',
           targetId: codeEntryUser.user.id,
@@ -552,7 +602,7 @@ class UserController {
         req,
         userId: codeEntryUser.user.id,
         username: codeEntryUser.user.username,
-        action: 'auth.signin.2fa_success',
+        action: isTotpChallenge ? 'auth.signin.totp_success' : 'auth.signin.2fa_success',
         targetType: 'user',
         targetId: codeEntryUser.user.id,
         details: { rememberDevice: Boolean(rememberDevice) },
@@ -564,10 +614,129 @@ class UserController {
     }
   }
 
+  async setupTotp(req, res, next) {
+    try {
+      const user = await User.findByPk(req.user.id, {
+        attributes: ['id', 'username', 'email', 'isTotpEnabled', 'totpSecret', 'totpConfirmedAt'],
+        rejectOnEmpty: true,
+      });
+
+      validateCheck(user.isTotpEnabled, 'TOTP уже включён.');
+
+      const secret = totpService.generateSecret();
+      await user.update({
+        totpSecret: totpService.encryptSecret(secret),
+        isTotpEnabled: false,
+        totpConfirmedAt: null,
+      });
+
+      await securityAuditService.log({
+        req,
+        userId: user.id,
+        username: user.username,
+        action: 'auth.totp.setup_started',
+        targetType: 'user',
+        targetId: user.id,
+      });
+
+      const otpauthUrl = totpService.buildOtpAuthUrl({ secret, username: user.username });
+
+      return res.json({
+        secret,
+        qrCodeDataUrl: qrCodeService.createTotpDataUrl(otpauthUrl),
+        message: 'Добавьте ключ в Google Authenticator и подтвердите кодом из приложения.',
+      });
+    } catch (error) {
+      return next(ApiError.badRequest(error.message));
+    }
+  }
+
+  async confirmTotp(req, res, next) {
+    try {
+      const { code } = req.body;
+      const user = await User.findByPk(req.user.id, {
+        include: [{ model: Role, attributes: ['name'], required: false }],
+        rejectOnEmpty: true,
+      });
+
+      validateCheck(!user.totpSecret, 'Сначала начните настройку TOTP.');
+
+      const secret = totpService.decryptSecret(user.totpSecret);
+      validateCheck(!totpService.verifyCode(secret, code), 'Неверный код из приложения.');
+
+      await user.update({
+        isTotpEnabled: true,
+        totpConfirmedAt: new Date(),
+      });
+
+      await securityAuditService.log({
+        req,
+        userId: user.id,
+        username: user.username,
+        action: 'auth.totp.enabled',
+        targetType: 'user',
+        targetId: user.id,
+      });
+
+      return res.json({
+        message: 'TOTP включён.',
+        user: this.buildUserDto(user),
+      });
+    } catch (error) {
+      return next(ApiError.badRequest(error.message));
+    }
+  }
+
+  async disableTotp(req, res, next) {
+    try {
+      const { code } = req.body;
+      const user = await User.findByPk(req.user.id, {
+        include: [{ model: Role, attributes: ['name'], required: false }],
+        rejectOnEmpty: true,
+      });
+
+      validateCheck(!user.isTotpEnabled || !user.totpSecret, 'TOTP уже отключён.');
+
+      const secret = totpService.decryptSecret(user.totpSecret);
+      validateCheck(!totpService.verifyCode(secret, code), 'Неверный код из приложения.');
+
+      await user.update({
+        isTotpEnabled: false,
+        totpSecret: null,
+        totpConfirmedAt: null,
+      });
+
+      await securityAuditService.log({
+        req,
+        userId: user.id,
+        username: user.username,
+        action: 'auth.totp.disabled',
+        targetType: 'user',
+        targetId: user.id,
+      });
+
+      return res.json({
+        message: 'TOTP отключён.',
+        user: this.buildUserDto(user),
+      });
+    } catch (error) {
+      return next(ApiError.badRequest(error.message));
+    }
+  }
+
   async check(req, res, next) {
     try {
       const user = await User.findByPk(req.user.id, {
-        attributes: ['id', 'username', 'email', 'roleId', 'tokenVersion', 'isTwoFactorEnabled', 'isEmailVerified'],
+        attributes: [
+          'id',
+          'username',
+          'email',
+          'roleId',
+          'tokenVersion',
+          'isTwoFactorEnabled',
+          'isTotpEnabled',
+          'isEmailVerified',
+        ],
         include: [{ model: Role, attributes: ['name'], required: false }],
         rejectOnEmpty: true,
       });
@@ -583,7 +752,7 @@ class UserController {
   async getProfile(req, res, next) {
     try {
       const user = await User.findByPk(req.user.id, {
-        attributes: ['id', 'username', 'email', 'isTwoFactorEnabled', 'isEmailVerified'],
+        attributes: ['id', 'username', 'email', 'isTwoFactorEnabled', 'isTotpEnabled', 'isEmailVerified'],
         include: [{ model: Role, attributes: ['id', 'name'], required: false }],
         rejectOnEmpty: true,
       });

@@ -80,7 +80,7 @@ const Navbar = observer((props) => {
                                         </li>
                                         <li className="nav-list_item">
                                             <NavLink to="/tictactoe" className={({ isActive }) => `${isActive ? activeLink : passiveLink} ${strongLink}`}>
-                                                Крестики нолики
+                                                Крестики-нолики
                                             </NavLink>
                                         </li>
                                         <li className="nav-list_item">

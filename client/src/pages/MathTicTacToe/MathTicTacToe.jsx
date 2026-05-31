@@ -1,7 +1,6 @@
 import './mathtictactoe.scss';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import moment from 'moment';
 import { API } from '@mindx/http/API';
 import { ROUTES } from '@mindx/utils/consts';
 import { getGameLabel } from '@mindx/utils/gameLabels';
@@ -12,14 +11,42 @@ import { ErrorEmmiter, SuccessEmmiter } from '@mindx/components/UI/Toastify/Noti
 const SETTINGS_OPTIONS = {
   boardSizes: [3, 4, 5],
   difficulties: [
-    { value: 'easy', label: 'Лёгкий' },
-    { value: 'medium', label: 'Средний' },
-    { value: 'hard', label: 'Сложный' },
+    { value: 'easy', label: 'Лёгкие' },
+    { value: 'medium', label: 'Средние' },
+    { value: 'hard', label: 'Сложные' },
   ],
 };
 
 const getDifficultyLabel = (difficulty) =>
   SETTINGS_OPTIONS.difficulties.find((item) => item.value === difficulty)?.label || difficulty;
+
+const POINTS_BY_DIFFICULTY = {
+  easy: 1,
+  medium: 1.25,
+  hard: 1.5,
+};
+
+const BOARD_MULTIPLIERS = {
+  3: 1,
+  4: 1.2,
+  5: 1.4,
+};
+
+const MATCH_POINTS = {
+  win: 40,
+  draw: 10,
+  loss: -15,
+  forfeitWin: 25,
+  quit: -40,
+};
+
+const getRatingPoints = (boardSize, difficulty, result) => {
+  const multiplier =
+    (POINTS_BY_DIFFICULTY[difficulty] || POINTS_BY_DIFFICULTY.easy) *
+    (BOARD_MULTIPLIERS[Number(boardSize)] || BOARD_MULTIPLIERS[3]);
+
+  return Math.round(MATCH_POINTS[result] * multiplier);
+};
 
 const DEFAULT_TIME_LIMIT = 10;
 const DEFAULT_TURN_TIME_LIMIT = 30;
@@ -96,6 +123,18 @@ const MathTicTacToe = () => {
   const isGameStarted = state?.status === 'playing';
   const isGameFinished = state?.status === 'finished';
   const canManageSettings = Boolean(!state || (state.isLeader && state.status === 'waiting'));
+  const currentBoardSize = state?.boardSize || selectedBoardSize;
+  const currentDifficulty = state?.difficulty || selectedDifficulty;
+  const matchRating = useMemo(
+    () => ({
+      win: getRatingPoints(currentBoardSize, currentDifficulty, 'win'),
+      draw: getRatingPoints(currentBoardSize, currentDifficulty, 'draw'),
+      loss: getRatingPoints(currentBoardSize, currentDifficulty, 'loss'),
+      forfeitWin: getRatingPoints(currentBoardSize, currentDifficulty, 'forfeitWin'),
+      quit: getRatingPoints(currentBoardSize, currentDifficulty, 'quit'),
+    }),
+    [currentBoardSize, currentDifficulty]
+  );
   const isChoosingCell = Boolean(isGameStarted && !state?.pendingQuestion && state?.turnExpiresAt);
   const pendingQuestionKey = state?.pendingQuestion
     ? [
@@ -445,10 +484,13 @@ const MathTicTacToe = () => {
     const isWinningCell = (state?.winningCells || []).some(
       (cell) => cell.row === rowIndex && cell.col === colIndex
     );
+    const isPendingCell =
+      state?.pendingQuestion?.row === rowIndex && state?.pendingQuestion?.col === colIndex;
 
     return [
       'ttt-cell',
       value ? `filled ${value === 'X' ? 'x-cell' : 'o-cell'}` : '',
+      isPendingCell ? 'pending-cell' : '',
       isWinningCell ? 'winner-cell' : '',
     ]
       .filter(Boolean)
@@ -609,7 +651,7 @@ const MathTicTacToe = () => {
                 />
               </label>
               <label>
-                <span>Сложность</span>
+                <span>Примеры</span>
                 <select
                   value={sessionDifficultyFilter}
                   onChange={(event) => setSessionDifficultyFilter(event.target.value)}
@@ -652,7 +694,7 @@ const MathTicTacToe = () => {
                     {Boolean(session.players?.length) && (
                       <small>{session.players.map((player) => player.name).join(', ')}</small>
                     )}
-                    <small>Сложность: {getDifficultyLabel(session.difficulty)}</small>
+                    <small>Примеры: {getDifficultyLabel(session.difficulty)}</small>
                   </div>
                   <button
                     className="secondary-btn"
@@ -674,31 +716,46 @@ const MathTicTacToe = () => {
             <span className="ttt-badge">Онлайн-игра в реальном времени</span>
             <h1>{getGameLabel(gameInfo) || 'Крестики-нолики'}</h1>
             <p className="ttt-description">
-              Перед каждым ходом игрок решает математический пример. Верный ответ даёт
-              право занять клетку, неверный ответ или таймаут в 10 секунд передают ход
-              сопернику.
+              Перед каждым ходом игрок выбирает клетку, куда хочет поставить свой символ, и решает
+              математический пример. Верный ответ даёт право занять клетку, неверный ответ или
+              таймаут в 10 секунд передают ход сопернику.
             </p>
 
             <div className="ttt-meta">
-              <div className="ttt-meta-item">
-                <span>Начало</span>
-                <strong>
-                  {gameInfo?.startDate
-                    ? moment(gameInfo.startDate).format('DD.MM.YYYY HH:mm')
-                    : '-'}
-                </strong>
+              <div className="ttt-meta-item ttt-meta-logo-card">
+                <span>Режим</span>
+                <strong className="ttt-meta-logo">XO</strong>
+                <small>дуэль на точность</small>
               </div>
               <div className="ttt-meta-item">
-                <span>Окончание</span>
-                <strong>
-                  {gameInfo?.endDate ? moment(gameInfo.endDate).format('DD.MM.YYYY HH:mm') : '-'}
-                </strong>
+                <span>Поле</span>
+                <strong>{currentBoardSize}x{currentBoardSize}</strong>
+                <small>для победы собери {state?.lineLength || currentBoardSize} игровых символа в ряд</small>
               </div>
               <div className="ttt-meta-item">
-                <span>Линия для победы</span>
-                <strong>{state?.lineLength || selectedBoardSize}</strong>
+                <span>Примеры</span>
+                <strong>{getDifficultyLabel(currentDifficulty)}</strong>
+                <small>влияет на рейтинг</small>
+              </div>
+              <div className="ttt-meta-item">
+                <span>Победа</span>
+                <strong>+{matchRating.win}</strong>
+                <small>+{matchRating.forfeitWin}, если соперник вышел</small>
+              </div>
+              <div className="ttt-meta-item">
+                <span>Ничья</span>
+                <strong>{matchRating.draw >= 0 ? '+' : ''}{matchRating.draw}</strong>
+                <small>оба игрока получают одинаково</small>
+              </div>
+              <div className="ttt-meta-item">
+                <span>Поражение</span>
+                <strong>{matchRating.loss}</strong>
+                <small>{matchRating.quit} за выход после старта</small>
               </div>
             </div>
+            <p className="ttt-advice">
+              Побеждает не тот, кто спешит, а тот, кто видит поле на ход вперёд.
+            </p>
           </section>
 
           <aside className="ttt-sidebar">
@@ -759,7 +816,7 @@ const MathTicTacToe = () => {
                 </label>
 
                 <label>
-                  <span>Сложность</span>
+                  <span>Примеры</span>
                   <select
                     value={selectedDifficulty}
                     disabled={!canManageSettings}

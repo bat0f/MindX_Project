@@ -6,6 +6,18 @@ import MindxTabs from '@mindx/components/MindxTabs/MindxTabs';
 import { API } from '@mindx/http/API.js';
 import { GAME_LABELS_BY_TYPE, getGameLabel } from '@mindx/utils/gameLabels';
 
+const getUniqueById = (items = []) => {
+  const uniqueItems = new Map();
+
+  items.forEach((item) => {
+    if (item?.id && !uniqueItems.has(item.id)) {
+      uniqueItems.set(item.id, item);
+    }
+  });
+
+  return [...uniqueItems.values()];
+};
+
 const Rating = () => {
   const [data, setData] = useState([]);
   const [template, setTemplate] = useState({});
@@ -17,14 +29,14 @@ const Rating = () => {
     customTab: true,
     type: 'rating',
     getTabList: async () => await getTabList(),
-    showType: true,
+    showType: false,
   };
 
   const getTabList = async () => {
     try {
       const response = await API?.rating?.getList();
 
-      return Object.values(response ?? {}).map((game) => ({
+      return getUniqueById(Object.values(response ?? {})).map((game) => ({
         id: game?.id,
         label: getGameLabel(game),
         type: GAME_LABELS_BY_TYPE[game?.typeGame] || game?.typeGame,

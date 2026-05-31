@@ -11,15 +11,21 @@
 	display: flex;
 	flex-direction: row;
 	justify-content: center;
-	row-gap: 10px;
+	align-items: center;
+	gap: 14px 30px;
 }
 
 .social {
 	display: flex;
-	margin-left: 30px;
-	column-gap: 20px;
+	column-gap: 18px;
 }
 
 .copyright {
 	font-size: 16px;
+}
+
+@media (max-width: 560px) {
+	.footer_wrapper {
+		flex-direction: column;
+	}
 }

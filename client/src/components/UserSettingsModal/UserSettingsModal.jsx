@@ -11,9 +11,14 @@ const UserSettingsModal = ({ isOpen, onClose }) => {
     username: '',
     email: '',
     isTwoFactorEnabled: false,
+    isTotpEnabled: false,
     isEmailVerified: true,
   });
   const [verificationCode, setVerificationCode] = useState('');
+  const [totpSetup, setTotpSetup] = useState(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [totpDisableCode, setTotpDisableCode] = useState('');
+  const [totpLoading, setTotpLoading] = useState(false);
   const [passwordResetRequested, setPasswordResetRequested] = useState(false);
   const [passwordResetCode, setPasswordResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -43,8 +48,12 @@ const UserSettingsModal = ({ isOpen, onClose }) => {
           username: profile.username || '',
           email: profile.email || '',
           isTwoFactorEnabled: Boolean(profile.isTwoFactorEnabled),
+          isTotpEnabled: Boolean(profile.isTotpEnabled),
           isEmailVerified: Boolean(profile.isEmailVerified),
         });
+        setTotpSetup(null);
+        setTotpCode('');
+        setTotpDisableCode('');
         setSessions(sessionList);
       })
       .catch((error) => {
@@ -95,6 +104,49 @@ const UserSettingsModal = ({ isOpen, onClose }) => {
       SuccessEmmiter(response.message || 'Настройка двухэтапной аутентификации сохранена.');
     } catch (error) {
       ErrorEmmiter(error?.response?.data?.error || 'Не удалось сохранить настройку двухэтапной аутентификации.');
+    }
+  };
+
+  const startTotpSetup = async () => {
+    try {
+      setTotpLoading(true);
+      const response = await API.user.setupTotp();
+      setTotpSetup(response);
+      setTotpCode('');
+      SuccessEmmiter(response.message || 'Добавьте ключ в приложение-аутентификатор.');
+    } catch (error) {
+      ErrorEmmiter(error?.response?.data?.error || 'Не удалось начать настройку TOTP.');
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
+  const confirmTotp = async () => {
+    try {
+      setTotpLoading(true);
+      const response = await API.user.confirmTotp(totpCode.trim());
+      setForm((prev) => ({ ...prev, isTotpEnabled: true }));
+      setTotpSetup(null);
+      setTotpCode('');
+      SuccessEmmiter(response.message || 'TOTP включён.');
+    } catch (error) {
+      ErrorEmmiter(error?.response?.data?.error || 'Не удалось подтвердить TOTP.');
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
+  const disableTotp = async () => {
+    try {
+      setTotpLoading(true);
+      const response = await API.user.disableTotp(totpDisableCode.trim());
+      setForm((prev) => ({ ...prev, isTotpEnabled: false }));
+      setTotpDisableCode('');
+      SuccessEmmiter(response.message || 'TOTP отключён.');
+    } catch (error) {
+      ErrorEmmiter(error?.response?.data?.error || 'Не удалось отключить TOTP.');
+    } finally {
+      setTotpLoading(false);
     }
   };
 
@@ -280,6 +332,83 @@ const UserSettingsModal = ({ isOpen, onClose }) => {
               <button type="button" className="primary-btn" onClick={saveTwoFactorSettings}>
                 Сохранить 2FA
               </button>
+            </div>
+
+            <div className="totp-box">
+              <div className="settings-actions settings-actions--between">
+                <div>
+                  <h3>TOTP (Google Authenticator)</h3>
+                  <p className="settings-hint">
+                    Альтернативная защита входа: приложение генерирует новый 6-значный код каждые 30 секунд.
+                  </p>
+                </div>
+                <span className={form.isTotpEnabled ? 'totp-status totp-status--on' : 'totp-status'}>
+                  {form.isTotpEnabled ? 'Включён' : 'Отключён'}
+                </span>
+              </div>
+
+              {!form.isTotpEnabled && !totpSetup && (
+                <button type="button" className="primary-btn" onClick={startTotpSetup} disabled={totpLoading}>
+                  Настроить Google Authenticator
+                </button>
+              )}
+
+              {!form.isTotpEnabled && totpSetup && (
+                <div className="totp-setup">
+                  <p className="settings-hint">
+                    В Google Authenticator нажмите добавление аккаунта и отсканируйте QR-код. Если камера недоступна,
+                    введите ключ вручную.
+                  </p>
+                  <div className="totp-qr-wrap">
+                    <img src={totpSetup.qrCodeDataUrl} alt="QR-код для Google Authenticator" className="totp-qr" />
+                  </div>
+                  <label>
+                    Резервный ключ настройки
+                    <input className="totp-secret" type="text" value={totpSetup.secret} readOnly />
+                  </label>
+                  <input
+                    type="text"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value)}
+                    placeholder="Код из приложения"
+                    maxLength={6}
+                  />
+                  <div className="settings-actions">
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => {
+                        setTotpSetup(null);
+                        setTotpCode('');
+                      }}
+                      disabled={totpLoading}
+                    >
+                      Отмена
+                    </button>
+                    <button type="button" className="primary-btn" onClick={confirmTotp} disabled={totpLoading}>
+                      Подтвердить TOTP
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {form.isTotpEnabled && (
+                <div className="totp-setup">
+                  <p className="settings-hint">
+                    Для отключения введите текущий код из приложения-аутентификатора.
+                  </p>
+                  <input
+                    type="text"
+                    value={totpDisableCode}
+                    onChange={(e) => setTotpDisableCode(e.target.value)}
+                    placeholder="Код из приложения"
+                    maxLength={6}
+                  />
+                  <button type="button" className="secondary-btn" onClick={disableTotp} disabled={totpLoading}>
+                    Отключить TOTP
+                  </button>
+                </div>
+              )}
             </div>
 
             {!form.isEmailVerified && (

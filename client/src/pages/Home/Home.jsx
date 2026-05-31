@@ -43,19 +43,26 @@ const Home = () => {
         </p>
       </section>
 
-      <section className={classes.gamesGrid} aria-label="Игры">
-        {gameCards.map((game) => (
-          <NavLink
-            key={game.route}
-            to={game.route}
-            className={`${classes.gameCard} ${classes[game.accent]}`}
-          >
-            <span className={classes.gameMark}>{game.mark}</span>
-            <span className={classes.gameTitle}>{game.title}</span>
-            <span className={classes.gameDescription}>{game.description}</span>
-            <span className={classes.gameAction}>Открыть</span>
-          </NavLink>
-        ))}
+      <section className={classes.gamesSection} aria-label="Игры">
+        <div className={classes.gamesHeading}>
+          <span>Выберите режим</span>
+          <h2>Наши игры</h2>
+        </div>
+
+        <div className={classes.gamesGrid}>
+          {gameCards.map((game) => (
+            <NavLink
+              key={game.route}
+              to={game.route}
+              className={`${classes.gameCard} ${classes[game.accent]}`}
+            >
+              <span className={classes.gameMark}>{game.mark}</span>
+              <span className={classes.gameTitle}>{game.title}</span>
+              <span className={classes.gameDescription}>{game.description}</span>
+              <span className={classes.gameAction}>Открыть</span>
+            </NavLink>
+          ))}
+        </div>
       </section>
     </main>
   );
