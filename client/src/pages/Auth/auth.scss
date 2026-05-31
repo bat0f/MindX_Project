@@ -26,6 +26,36 @@
     font-size: clamp(10px, 2vw, 20px);
   }
 
+  .password-field {
+    position: relative;
+    width: 100%;
+
+    .auth-input {
+      padding-right: 44px;
+    }
+  }
+
+  .password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    background: transparent;
+    color: #4f4f4f;
+    cursor: pointer;
+    transform: translateY(-50%);
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
   label {
     font-weight: 500;
     margin-left: 5px;

@@ -132,6 +132,51 @@
     font-weight: 700;
   }
 
+  .winner-summary {
+    display: grid;
+    gap: 14px;
+  }
+
+  .winner-table-wrap {
+    padding: 16px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.1);
+
+    h3 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+  }
+
+  .winner-table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow: hidden;
+    border-radius: 12px;
+    font-size: 14px;
+
+    th,
+    td {
+      padding: 10px 8px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    th {
+      color: rgba(255, 255, 255, 0.72);
+      font-weight: 600;
+    }
+
+    tr.leader td {
+      color: #ffdf91;
+      font-weight: 800;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+  }
+
   .players-list {
     display: grid;
     gap: 12px;

@@ -2,8 +2,9 @@ import './auth.scss';
 import { ROUTES } from '@mindx/utils/consts.js';
 import { API } from '@mindx/http/API.js';
 import { useContext, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { observer } from 'mobx-react-lite';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { Context } from '@mindx/index.js';
 import { ErrorEmmiter, SuccessEmmiter } from '@mindx/components/UI/Toastify/Notify.jsx';
 import { mindxDebounce } from '@mindx/utils/tools';
@@ -11,9 +12,11 @@ import { mindxDebounce } from '@mindx/utils/tools';
 const SignIn = observer(() => {
   const { user } = useContext(Context);
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState('signin');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [challengeToken, setChallengeToken] = useState('');
   const [twoFactorMethod, setTwoFactorMethod] = useState('email');
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -23,6 +26,8 @@ const SignIn = observer(() => {
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [resetRequested, setResetRequested] = useState(false);
 
   const completeAuth = (payload) => {
@@ -31,7 +36,7 @@ const SignIn = observer(() => {
     if (payload.user.role === 'ADMIN') {
       user.setIsAdmin(true);
     }
-    navigate(ROUTES.HOME_ROUTE);
+    navigate(location.state?.from?.pathname || ROUTES.HOME_ROUTE);
     window.location.reload();
   };
 
@@ -115,16 +120,26 @@ const SignIn = observer(() => {
               </div>
               <div>
                 <label htmlFor="password">Пароль</label>
-                <input
-                  type="password"
-                  required
-                  id="password"
-                  className="auth-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength={8}
-                  maxLength={60}
-                />
+                <div className="password-field">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    id="password"
+                    className="auth-input"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    minLength={8}
+                    maxLength={60}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
               </div>
               <button type="button" className="link-btn" onClick={() => setMode('reset')}>
                 Забыли пароль?
@@ -218,23 +233,43 @@ const SignIn = observer(() => {
                   </div>
                   <div>
                     <label htmlFor="newPassword">Новый пароль</label>
-                    <input
-                      type="password"
-                      id="newPassword"
-                      className="auth-input"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                    />
+                    <div className="password-field">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        id="newPassword"
+                        className="auth-input"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        aria-label={showNewPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                        onClick={() => setShowNewPassword((value) => !value)}
+                      >
+                        {showNewPassword ? <FaEyeSlash /> : <FaEye />}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label htmlFor="confirmNewPassword">Повторите пароль</label>
-                    <input
-                      type="password"
-                      id="confirmNewPassword"
-                      className="auth-input"
-                      value={confirmNewPassword}
-                      onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    />
+                    <div className="password-field">
+                      <input
+                        type={showConfirmNewPassword ? 'text' : 'password'}
+                        id="confirmNewPassword"
+                        className="auth-input"
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        aria-label={showConfirmNewPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                        onClick={() => setShowConfirmNewPassword((value) => !value)}
+                      >
+                        {showConfirmNewPassword ? <FaEyeSlash /> : <FaEye />}
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

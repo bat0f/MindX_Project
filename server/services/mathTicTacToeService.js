@@ -507,6 +507,23 @@ class MathTicTacToeService {
     player.wantsRematch = true;
     this.updateTimestamp(session);
 
+    if (session.players.length === 1) {
+      session.players = session.players.map((item) => ({
+        ...item,
+        symbol: 'X',
+        isReady: false,
+        wantsRematch: false,
+      }));
+      session.leaderId = player.id;
+      this.resetMatchToWaiting(session);
+
+      return {
+        reset: true,
+        restarted: false,
+        state: this.toDto(session, userId),
+      };
+    }
+
     if (session.players.length === 2 && session.players.every((item) => item.wantsRematch)) {
       session.players = [session.players[1], session.players[0]].map((item) => ({
         ...item,

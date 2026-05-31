@@ -1,5 +1,6 @@
 import './userSettingsModal.scss';
 import { useEffect, useState } from 'react';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { API } from '@mindx/http/API';
 import { ErrorEmmiter, SuccessEmmiter } from '@mindx/components/UI/Toastify/Notify';
 
@@ -23,6 +24,8 @@ const UserSettingsModal = ({ isOpen, onClose }) => {
   const [passwordResetCode, setPasswordResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
   const loadSessions = async () => {
     try {
@@ -276,18 +279,38 @@ const UserSettingsModal = ({ isOpen, onClose }) => {
               </div>
 
               <div className="password-reset-form">
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Новый пароль"
-                />
-                <input
-                  type="password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  placeholder="Повторите новый пароль"
-                />
+                <div className="settings-password-field">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Новый пароль"
+                  />
+                  <button
+                    type="button"
+                    className="settings-password-toggle"
+                    aria-label={showNewPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowNewPassword((value) => !value)}
+                  >
+                    {showNewPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
+                <div className="settings-password-field">
+                  <input
+                    type={showConfirmNewPassword ? 'text' : 'password'}
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    placeholder="Повторите новый пароль"
+                  />
+                  <button
+                    type="button"
+                    className="settings-password-toggle"
+                    aria-label={showConfirmNewPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowConfirmNewPassword((value) => !value)}
+                  >
+                    {showConfirmNewPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
 
                 {passwordResetRequested && (
                   <>

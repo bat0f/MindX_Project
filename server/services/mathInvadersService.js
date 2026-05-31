@@ -326,7 +326,11 @@ class MathInvadersService {
     state.lastMovedCell = null;
     state.currentAttemptCost = 0;
     state.pendingAttempt = null;
-    this.finishTurn(state);
+    this.checkGameOver(state);
+
+    if (!state.gameOver) {
+      this.finishTurn(state);
+    }
   }
 
   canMove(player, newX, newY) {
@@ -347,6 +351,7 @@ class MathInvadersService {
     if (leader) {
       state.gameOver = true;
       state.winner = `${leader.name} победил!`;
+      state.activePlayerId = null;
       return;
     }
 
@@ -355,7 +360,42 @@ class MathInvadersService {
       state.gameOver = true;
       const winner = [...state.players].sort((a, b) => b.capturedCells - a.capturedCells)[0];
       state.winner = `${winner.name} победил с ${winner.capturedCells} клетками!`;
+      state.activePlayerId = null;
+      return;
     }
+
+    const allPlayersOutOfCoins = state.players.length > 0 && state.players.every((player) => player.coins <= 0);
+    if (allPlayersOutOfCoins) {
+      state.gameOver = true;
+      const standings = this.getStandings(state);
+      const leaders = standings.filter((player) => player.capturedCells === standings[0].capturedCells);
+      state.winner =
+        leaders.length === 1
+          ? `${leaders[0].name} победил: у всех игроков закончились монеты.`
+          : 'Ничья: у всех игроков закончились монеты.';
+      state.activePlayerId = null;
+    }
+  }
+
+  getStandings(state) {
+    return [...state.players]
+      .map((player) => ({
+        id: player.id,
+        name: player.name,
+        coins: player.coins,
+        capturedCells: player.capturedCells,
+      }))
+      .sort((firstPlayer, secondPlayer) => {
+        if (secondPlayer.capturedCells !== firstPlayer.capturedCells) {
+          return secondPlayer.capturedCells - firstPlayer.capturedCells;
+        }
+
+        if (secondPlayer.coins !== firstPlayer.coins) {
+          return secondPlayer.coins - firstPlayer.coins;
+        }
+
+        return firstPlayer.name.localeCompare(secondPlayer.name, 'ru');
+      });
   }
 
   finishTurn(state) {
@@ -539,6 +579,7 @@ class MathInvadersService {
       activePlayerId: state.activePlayerId,
       gameOver: state.gameOver,
       winner: state.winner,
+      standings: this.getStandings(state),
       lastMovedCell: state.lastMovedCell,
       currentAttemptCost: state.currentAttemptCost,
       pendingAttempt: state.pendingAttempt

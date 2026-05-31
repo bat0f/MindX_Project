@@ -4,6 +4,7 @@ import { API } from '@mindx/http/API.js';
 import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { observer } from 'mobx-react-lite';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { Context } from '../../index.js';
 import { ErrorEmmiter, SuccessEmmiter } from '../../components/UI/Toastify/Notify.jsx';
 import { mindxDebounce } from '@mindx/utils/tools';
@@ -15,6 +16,8 @@ const SignUp = observer(() => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationPending, setVerificationPending] = useState(false);
 
@@ -95,27 +98,47 @@ const SignUp = observer(() => {
               </div>
               <div>
                 <label htmlFor="password">Пароль</label>
-                <input
-                  type="password"
-                  id="password"
-                  className="auth-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength={8}
-                  maxLength={60}
-                />
+                <div className="password-field">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="password"
+                    className="auth-input"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    minLength={8}
+                    maxLength={60}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label htmlFor="repeat_password">Повторите пароль</label>
-                <input
-                  type="password"
-                  id="repeat_password"
-                  className="auth-input"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  minLength={8}
-                  maxLength={60}
-                />
+                <div className="password-field">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    id="repeat_password"
+                    className="auth-input"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    minLength={8}
+                    maxLength={60}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    aria-label={showConfirmPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    onClick={() => setShowConfirmPassword((value) => !value)}
+                  >
+                    {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
               </div>
               <div className="btn-section">
                 <a className="btn sign" href={ROUTES.SIGNIN_ROUTE}>

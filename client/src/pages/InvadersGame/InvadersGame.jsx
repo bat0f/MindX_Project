@@ -375,7 +375,36 @@ const InvadersGame = () => {
                 </div>
               )}
 
-              {state?.gameOver && <div className="winner-banner">{state?.winner}</div>}
+              {state?.gameOver && (
+                <div className="winner-summary">
+                  <div className="winner-banner">{state?.winner}</div>
+                  {Boolean(state?.standings?.length) && (
+                    <div className="winner-table-wrap">
+                      <h3>Итоги партии</h3>
+                      <table className="winner-table">
+                        <thead>
+                          <tr>
+                            <th>Место</th>
+                            <th>Игрок</th>
+                            <th>Клетки</th>
+                            <th>Монеты</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {state.standings.map((player, index) => (
+                            <tr key={player.id} className={index === 0 ? 'leader' : ''}>
+                              <td>{index + 1}</td>
+                              <td>{player.name}</td>
+                              <td>{player.capturedCells}</td>
+                              <td>{player.coins}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="players-card">
